@@ -6,15 +6,12 @@
 	var/time = ""
 	var/timestamp = 0
 	var/is_outgoing = FALSE
-	// base64 of an attached photo, if any.
-	var/photo_b64 = null
 
-/datum/phone_message/New(contact_name, number, message_text, is_outgoing = FALSE, photo_b64 = null)
+/datum/phone_message/New(contact_name, number, message_text, is_outgoing = FALSE)
 	src.contact_name = contact_name
 	src.number = number
 	src.message_text = message_text
 	src.is_outgoing = is_outgoing
-	src.photo_b64 = photo_b64
 	src.timestamp = city_time()
 	src.time = server_timestamp("hh:mm", ic_time = TRUE)
 
@@ -23,8 +20,8 @@
 	var/contact_number = ""
 	var/list/messages = list()
 
-/datum/phone_conversation/proc/add_message(message_text, is_outgoing = FALSE, photo_b64 = null)
-	var/datum/phone_message/new_message = new /datum/phone_message(contact_name, contact_number, message_text, is_outgoing, photo_b64)
+/datum/phone_conversation/proc/add_message(message_text, is_outgoing = FALSE)
+	var/datum/phone_message/new_message = new /datum/phone_message(contact_name, contact_number, message_text, is_outgoing)
 	messages += new_message
 	return new_message
 
