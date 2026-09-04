@@ -12,6 +12,12 @@ posts?: Array<{
     date: string;
     author: string;
     time: string;
+    photo?: string;
+}>;
+photos?: Array<{
+    name: string;
+    image: string;
+    ref: number;
 }>;
 is_admin?: boolean;
 }
@@ -36,8 +42,14 @@ const [body, setBody] = useState<string>('');
 const [composing, setComposing] = useState<boolean>(false);
 const [submitted, setSubmitted] = useState<boolean>(false);
 const [askedForUsername, toldToRegister] = useState<boolean>(false);
+const [attachedPhoto, setAttachedPhoto] = useState<number | null>(null);
+const [showPhotoPicker, setShowPhotoPicker] = useState<boolean>(false);
 const username = (data as any).endpost_username;
 const posts = (data as any).posts || [];
+const photos = (data as any).photos || [];
+const attachedPhotoEntry = photos.find(
+    (photo: any) => photo.ref === attachedPhoto,
+);
 
 useEffect(() => {
     if (askedForUsername && username) {//hacky but works. will probably refactor later
@@ -62,10 +74,13 @@ const handleSubmit = () => {
 
     act('submit_post', {
         body: body,
+        photo_ref: attachedPhoto,
     });
 
     setSubmitted(true);
     setBody('');
+    setAttachedPhoto(null);
+    setShowPhotoPicker(false);
     setTimeout(() => {
         setSubmitted(false);
         setComposing(false);
@@ -120,8 +135,8 @@ return (
                         <textarea
                             placeholder="Posts are deleted after 24hrs"
                             value={body}
-                            onChange={(e) => setBody(e.target.value.slice(0, 140))}
-                            maxLength={140}
+                            onChange={(e) => setBody(e.target.value.slice(0, 1000))}
+                            maxLength={1000}
                             //disabled={!username}
                             style={{
                                 width: '100%',
@@ -138,9 +153,91 @@ return (
                             }}
                         />
                         <Box fontSize="0.75em" color="#999" textAlign="right" mt={0.5} mr={3}>
-                            {body.length}/140
+                            {body.length}/1000
                         </Box>
                     </Stack.Item>
+                    <Stack.Item mr={2} ml={2}>
+                        <Stack align="center">
+                            <Button
+                                icon="camera"
+                                color="transparent"
+                                textColor="#4a90e2"
+                                onClick={() => setShowPhotoPicker(!showPhotoPicker)}
+                            >
+                                {attachedPhotoEntry
+                                    ? 'Change photo'
+                                    : 'Attach photo'}
+                            </Button>
+                            {attachedPhotoEntry ? (
+                                <Box position="relative" ml={1}>
+                                    <img
+                                        src={`data:image/png;base64,${attachedPhotoEntry.image}`}
+                                        alt={attachedPhotoEntry.name}
+                                        style={{
+                                            width: '48px',
+                                            height: '48px',
+                                            objectFit: 'cover',
+                                            borderRadius: '4px',
+                                        }}
+                                    />
+                                    <Icon
+                                        name="times"
+                                        color="#fff"
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            right: 0,
+                                            backgroundColor: '#00000099',
+                                            borderRadius: '50%',
+                                            cursor: 'pointer',
+                                        }}
+                                        onClick={() => setAttachedPhoto(null)}
+                                    />
+                                </Box>
+                            ) : null}
+                        </Stack>
+                    </Stack.Item>
+                    {showPhotoPicker && (
+                        <Stack.Item mr={2} ml={2} mb={1}>
+                            <Stack wrap="wrap" align="center">
+                                {photos.length === 0 ? (
+                                    <Box color="#999" fontSize="0.85em">
+                                        No photos yet. Take one with the Camera
+                                        app.
+                                    </Box>
+                                ) : (
+                                    photos.map((photo: any) => (
+                                        <Box
+                                            key={photo.ref}
+                                            mr={1}
+                                            mb={1}
+                                            style={{ cursor: 'pointer' }}
+                                            onClick={() => {
+                                                setAttachedPhoto(photo.ref);
+                                                setShowPhotoPicker(false);
+                                            }}
+                                        >
+                                            <img
+                                                src={`data:image/png;base64,${photo.image}`}
+                                                alt={photo.name}
+                                                style={{
+                                                    width: '48px',
+                                                    height: '48px',
+                                                    objectFit: 'cover',
+                                                    borderRadius: '4px',
+                                                    border:
+                                                        attachedPhoto ===
+                                                        photo.ref
+                                                            ? '2px solid #4a90e2'
+                                                            : '1px solid #ccc',
+                                                }}
+                                            />
+                                        </Box>
+                                    ))
+                                )}
+                            </Stack>
+                        </Stack.Item>
+                    )}
                     {submitted ? (
                         <Stack.Item>
                             <Box color="#2e7d32" fontSize="0.9em">
@@ -212,6 +309,18 @@ return (
                                 <Box style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                     {post_content.body}
                                 </Box>
+                                {post_content.photo ? (
+                                    <Box mt={1}>
+                                        <img
+                                            src={`data:image/png;base64,${post_content.photo}`}
+                                            alt="attachment"
+                                            style={{
+                                                maxWidth: '100%',
+                                                borderRadius: '4px',
+                                            }}
+                                        />
+                                    </Box>
+                                ) : null}
                             </Stack>
                         </Stack.Item>
                     ))}

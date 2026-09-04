@@ -8,12 +8,14 @@ import type { BooleanLike } from 'tgui-core/react';
 
 import { ScreenBackgrounds } from './ScreenBackgrounds';
 import { ScreenBrowser } from './ScreenBrowser';
+import { ScreenCamera } from './ScreenCamera';
 import { ScreenContacts } from './ScreenContacts';
 import { ScreenHome } from './ScreenHome';
 import { ScreenCalling, ScreenInCall } from './ScreenInCall';
 import { ScreenMessages } from './ScreenMessages';
 import { ScreenPhone } from './ScreenPhone';
 import { ScreenEndpost } from './ScreenEndpost';
+import { ScreenGallery } from './ScreenGallery';
 import { ScreenRecents } from './ScreenRecents';
 import { ScreenSettings } from './ScreenSettings';
 import { ScreenSoundSettings } from './ScreenSoundSettings';
@@ -60,6 +62,7 @@ export type ConversationMessage = {
   message_text: string;
   is_outgoing: BooleanLike;
   time: string;
+  photo?: string;
 };
 
 export type Conversation = {
@@ -67,6 +70,12 @@ export type Conversation = {
   contact_name: string;
   last_timestamp: number;
   last_message_text: string;
+};
+
+export type PhotoEntry = {
+  name: string;
+  image: string;
+  ref: number;
 };
 
 export type Data = {
@@ -97,6 +106,7 @@ export type Data = {
 
   conversations: Conversation[];
   current_conversation_messages: ConversationMessage[];
+  photos: PhotoEntry[];
 };
 
 export enum NavigableApps {
@@ -110,6 +120,8 @@ export enum NavigableApps {
   Settings,
   SoundSettings,
   Endpost,
+  Camera,
+  Gallery,
 }
 
 const PhysicalScreen = memo((props: {
@@ -182,6 +194,10 @@ const PhysicalScreen = memo((props: {
         return <ScreenSoundSettings setApp={setApp} />;
       case NavigableApps.Endpost:
         return <ScreenEndpost setApp={setApp} />;
+      case NavigableApps.Camera:
+        return <ScreenCamera setApp={setApp} />;
+      case NavigableApps.Gallery:
+        return <ScreenGallery setApp={setApp} />;
       default:
         return <ScreenHome setApp={setApp} />;
     }
@@ -205,7 +221,9 @@ const NavigationBar = memo((props: {
     app === NavigableApps.Recents ||
     app === NavigableApps.Messages ||
     app === NavigableApps.IRC ||
-    app === NavigableApps.Endpost
+    app === NavigableApps.Endpost ||
+    app === NavigableApps.Camera ||
+    app === NavigableApps.Gallery
   ) {
     textColor = '#000';
   }
@@ -218,7 +236,9 @@ const NavigationBar = memo((props: {
     app === NavigableApps.Recents ||
     app === NavigableApps.Messages ||
     app === NavigableApps.IRC ||
-    app === NavigableApps.Endpost
+    app === NavigableApps.Endpost ||
+    app === NavigableApps.Camera ||
+    app === NavigableApps.Gallery
   ) {
     backgroundColor = '#0004';
   }

@@ -274,6 +274,7 @@ export const ScreenHome = (props: {
                 text="Gallery"
                 iconName="file-image"
                 iconColor="orange"
+                onClick={() => navigateTo(NavigableApps.Gallery)}
               />
             </Stack.Item>
             <Stack.Item>
@@ -282,6 +283,7 @@ export const ScreenHome = (props: {
                 text="Camera"
                 iconName="camera"
                 iconColor="black"
+                onClick={() => navigateTo(NavigableApps.Camera)}
               />
             </Stack.Item>
             <Stack.Item>
