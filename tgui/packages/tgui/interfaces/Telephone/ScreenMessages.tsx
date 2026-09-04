@@ -5,82 +5,12 @@ import { useBackend } from 'tgui/backend';
 import type { Data, NavigableApps } from '.';
 import { ContactElement } from './ScreenContacts';
 
-// A letter key that supports an optional long-press alternate character
-// (used for Ё on the Russian layout).
-const LetterKey = (props: {
-  label: string;
-  altLabel?: string;
-  onPress: (key: string) => void;
-}) => {
-  const { label, altLabel, onPress } = props;
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressFired = useRef(false);
-
-  const cancelTimer = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
-
-  return (
-    <Box
-      inline
-      width={1.8}
-      height={2.4}
-      backgroundColor="#d5ffff"
-      textColor="#000"
-      fontSize={1.2}
-      style={{ borderRadius: '4px', position: 'relative' }}
-      onMouseDown={() => {
-        if (!altLabel) {
-          return;
-        }
-        longPressFired.current = false;
-        cancelTimer();
-        longPressTimer.current = setTimeout(() => {
-          longPressFired.current = true;
-          onPress(altLabel);
-        }, 400);
-      }}
-      onClick={() => {
-        if (longPressFired.current) {
-          longPressFired.current = false;
-          return;
-        }
-        onPress(label);
-      }}
-      onMouseUp={cancelTimer}
-      onMouseLeave={() => {
-        cancelTimer();
-        longPressFired.current = false;
-      }}
-    >
-      <Stack fill align="center" justify="center">
-        <Stack.Item>{label}</Stack.Item>
-      </Stack>
-      {altLabel && (
-        <Box
-          position="absolute"
-          top="0.1rem"
-          right="0.2rem"
-          fontSize={0.7}
-          textColor="#888"
-        >
-          {altLabel}
-        </Box>
-      )}
-    </Box>
-  );
-};
-
 export const Keyboard = (props: { onClick?: (keyPressed: string) => void }) => {
   const { onClick } = props;
   const { act, data } = useBackend<Data>();
   const [caps, setCaps] = useState(false);
   const [showSymbols, setShowSymbols] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(true);
-  const [rusLayout, setRusLayout] = useState(false);
   const keyHandler = (key: string) => {
     if (onClick) {
       onClick(key);
@@ -88,18 +18,10 @@ export const Keyboard = (props: { onClick?: (keyPressed: string) => void }) => {
     }
   };
 
-  // keyboard rows (Latin)
-  const letters_row1_en = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'];
-  const letters_row2_en = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'];
-  const letters_row3_en = ['Z', 'X', 'C', 'V', 'B', 'N', 'M'];
-  // keyboard rows (Cyrillic ЙЦУКЕН)
-  const letters_row1_ru = ['Й', 'Ц', 'У', 'К', 'Е', 'Н', 'Г', 'Ш', 'Щ', 'З', 'Х', 'Ъ'];
-  const letters_row2_ru = ['Ф', 'Ы', 'В', 'А', 'П', 'Р', 'О', 'Л', 'Д', 'Ж', 'Э'];
-  const letters_row3_ru = ['Я', 'Ч', 'С', 'М', 'И', 'Т', 'Ь', 'Б', 'Ю'];
-
-  const letters_row1 = rusLayout ? letters_row1_ru : letters_row1_en;
-  const letters_row2 = rusLayout ? letters_row2_ru : letters_row2_en;
-  const letters_row3 = rusLayout ? letters_row3_ru : letters_row3_en;
+  // keyboard rows
+  const letters_row1 = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'];
+  const letters_row2 = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'];
+  const letters_row3 = ['Z', 'X', 'C', 'V', 'B', 'N', 'M'];
 
   const symbols_row1 = ['[', ']', '{', '}', '#', '%', '^', '*', '+', '='];
   const symbols_row2 = ['_', '\\', '|', '~', '<', '>', '€', '£', '¥'];
@@ -170,17 +92,31 @@ export const Keyboard = (props: { onClick?: (keyPressed: string) => void }) => {
       </Stack.Item>
       <Stack.Item>
         <Stack fill align="center" justify="center">
-          {row1.map((letter) => {
-            const label = caps ? letter : letter.toLowerCase();
-            const altLabel =
-              rusLayout && letter === 'Е' ? (caps ? 'Ё' : 'ё') : undefined;
+          {row1.map((key) => {
+            if (!caps) {
+              key = key.toLowerCase();
+            }
             return (
-              <Stack.Item key={letter}>
-                <LetterKey
-                  label={label}
-                  altLabel={altLabel}
-                  onPress={keyHandler}
-                />
+              <Stack.Item
+                key={key}
+                onClick={() => keyHandler(key)}
+                style={{ cursor: 'pointer' }}
+              >
+                <Box
+                  inline
+                  width={1.8}
+                  height={2.4}
+                  backgroundColor="#d5ffff"
+                  textColor="#000"
+                  fontSize={1.2}
+                  style={{
+                    borderRadius: '4px',
+                  }}
+                >
+                  <Stack fill align="center" justify="center">
+                    <Stack.Item>{key}</Stack.Item>
+                  </Stack>
+                </Box>
               </Stack.Item>
             );
           })}
@@ -188,11 +124,31 @@ export const Keyboard = (props: { onClick?: (keyPressed: string) => void }) => {
       </Stack.Item>
       <Stack.Item>
         <Stack fill align="center" justify="center">
-          {row2.map((letter) => {
-            const label = caps ? letter : letter.toLowerCase();
+          {row2.map((key) => {
+            if (!caps) {
+              key = key.toLowerCase();
+            }
             return (
-              <Stack.Item key={letter}>
-                <LetterKey label={label} onPress={keyHandler} />
+              <Stack.Item
+                key={key}
+                onClick={() => keyHandler(key)}
+                style={{ cursor: 'pointer' }}
+              >
+                <Box
+                  inline
+                  width={1.8}
+                  height={2.4}
+                  backgroundColor="#d5ffff"
+                  textColor="#000"
+                  fontSize={1.2}
+                  style={{
+                    borderRadius: '4px',
+                  }}
+                >
+                  <Stack fill align="center" justify="center">
+                    <Stack.Item>{key}</Stack.Item>
+                  </Stack>
+                </Box>
               </Stack.Item>
             );
           })}
@@ -221,11 +177,31 @@ export const Keyboard = (props: { onClick?: (keyPressed: string) => void }) => {
               </Stack>
             </Box>
           </Stack.Item>
-          {row3.map((letter) => {
-            const label = caps ? letter : letter.toLowerCase();
+          {row3.map((key) => {
+            if (!caps) {
+              key = key.toLowerCase();
+            }
             return (
-              <Stack.Item key={letter}>
-                <LetterKey label={label} onPress={keyHandler} />
+              <Stack.Item
+                key={key}
+                onClick={() => keyHandler(key)}
+                style={{ cursor: 'pointer' }}
+              >
+                <Box
+                  inline
+                  width={1.8}
+                  height={2.4}
+                  backgroundColor="#d5ffff"
+                  textColor="#000"
+                  fontSize={1.2}
+                  style={{
+                    borderRadius: '4px',
+                  }}
+                >
+                  <Stack fill align="center" justify="center">
+                    <Stack.Item>{key}</Stack.Item>
+                  </Stack>
+                </Box>
               </Stack.Item>
             );
           })}
@@ -272,26 +248,6 @@ export const Keyboard = (props: { onClick?: (keyPressed: string) => void }) => {
             >
               <Stack fill align="center" justify="center">
                 <Stack.Item>{showSymbols ? 'ABC' : '?123'}</Stack.Item>
-              </Stack>
-            </Box>
-          </Stack.Item>
-          <Stack.Item
-            style={{ cursor: 'pointer' }}
-            onClick={() => setRusLayout(!rusLayout)}
-          >
-            <Box
-              inline
-              width={2}
-              height={2.4}
-              backgroundColor={rusLayout ? '#bcd9ff' : '#beecff'}
-              textColor="#000"
-              fontSize={1.2}
-              style={{
-                borderRadius: '4px',
-              }}
-            >
-              <Stack fill align="center" justify="center">
-                <Stack.Item>{rusLayout ? 'EN' : 'RU'}</Stack.Item>
               </Stack>
             </Box>
           </Stack.Item>
@@ -415,13 +371,11 @@ export const ScreenMessages = (props : {
     const displayHour = hour % 12 || 12;
     return `${displayHour}:${minute} ${period}`;
   };
-  const { my_number, published_numbers, our_contacts, our_blocked_contacts, current_conversation_messages, conversations, date, photos } = data;
+  const { my_number, published_numbers, our_contacts, our_blocked_contacts, current_conversation_messages, conversations, date } = data;
   const { enteredNumber, setEnteredNumber, setApp } = props;
 
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [messageText, setMessageText] = useState('');
-  const [attachedPhoto, setAttachedPhoto] = useState<number | null>(null);
-  const [showPhotoPicker, setShowPhotoPicker] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
 
@@ -462,12 +416,9 @@ export const ScreenMessages = (props : {
     if (messageText && selectedContact) {
       act('send_message', {
         contact_number: selectedContact,
-        message_text: messageText,
-        photo_ref: attachedPhoto,
+        message_text: messageText
       });
       setMessageText('');
-      setAttachedPhoto(null);
-      setShowPhotoPicker(false);
     }
   };
 
@@ -536,19 +487,6 @@ export const ScreenMessages = (props : {
                 style={{ borderRadius: '8px', maxWidth: '70%', wordWrap: 'break-word' }}
               >
                 {msg.message_text}
-                {msg.photo ? (
-                  <Box mt={0.5}>
-                    <img
-                      src={`data:image/png;base64,${msg.photo}`}
-                      alt="attachment"
-                      style={{
-                        maxWidth: '100%',
-                        borderRadius: '4px',
-                        display: 'block',
-                      }}
-                    />
-                  </Box>
-                ) : null}
                 <Box textAlign={msg.is_outgoing ? 'right' : 'left'} fontSize={0.7} mt={0.5} textColor={msg.is_outgoing ? '#ffffff' : '#303030'}>{convertTo12Hour(msg.time)}</Box>
               </Box>
               </Stack>
@@ -579,89 +517,6 @@ export const ScreenMessages = (props : {
             {messageText}
             {messageText.length === 0 && selectedContact && <span className="cursor">|</span>}
           </Box>
-          <Stack align="center" mt={0.5}>
-            <Stack.Item
-              style={{ cursor: 'pointer' }}
-              onClick={() => setShowPhotoPicker(!showPhotoPicker)}
-            >
-              <Icon
-                name="camera"
-                size={1.5}
-                color={attachedPhoto ? '#0069ff' : '#888'}
-              />
-            </Stack.Item>
-            {attachedPhoto ? (
-              <Stack.Item ml={1}>
-                {(() => {
-                  const photo = photos.find((p) => p.ref === attachedPhoto);
-                  return photo ? (
-                    <Box position="relative">
-                      <img
-                        src={`data:image/png;base64,${photo.image}`}
-                        alt={photo.name}
-                        style={{
-                          width: '36px',
-                          height: '36px',
-                          objectFit: 'cover',
-                          borderRadius: '4px',
-                        }}
-                      />
-                      <Icon
-                        name="times"
-                        color="#fff"
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          right: 0,
-                          backgroundColor: '#00000099',
-                          borderRadius: '50%',
-                          cursor: 'pointer',
-                        }}
-                        onClick={() => setAttachedPhoto(null)}
-                      />
-                    </Box>
-                  ) : null;
-                })()}
-              </Stack.Item>
-            ) : null}
-          </Stack>
-          {showPhotoPicker && (
-            <Stack wrap="wrap" align="center" mt={0.5}>
-              {photos.length === 0 ? (
-                <Box color="#999" fontSize={0.85} p={0.5}>
-                  No photos yet. Take one with the Camera app.
-                </Box>
-              ) : (
-                photos.map((photo) => (
-                  <Box
-                    key={photo.ref}
-                    mr={0.5}
-                    mb={0.5}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setAttachedPhoto(photo.ref);
-                      setShowPhotoPicker(false);
-                    }}
-                  >
-                    <img
-                      src={`data:image/png;base64,${photo.image}`}
-                      alt={photo.name}
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        objectFit: 'cover',
-                        borderRadius: '4px',
-                        border:
-                          attachedPhoto === photo.ref
-                            ? '2px solid #0069ff'
-                            : '1px solid #ccc',
-                      }}
-                    />
-                  </Box>
-                ))
-              )}
-            </Stack>
-          )}
         </Stack.Item>
         <Stack.Item mb={6}>
           <Keyboard onClick={handleKeyPress} />
