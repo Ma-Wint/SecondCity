@@ -2,6 +2,8 @@
 #define CAMERA_VIEWFINDER_SIZE 5
 // Upper bound for the player-selectable camera picture width/height.
 #define CAMERA_PICTURE_SIZE_MAX 5
+// Maximum length of an EndPost post (in characters).
+#define ENDPOST_POST_MAX_LENGTH 500
 
 /obj/item/smartphone
 	name = "smartphone"
@@ -779,8 +781,13 @@
 	if(!endpost_username)
 		return FALSE
 
+	body = trim(body)
+	if(length(body) > ENDPOST_POST_MAX_LENGTH)
+		to_chat(user, span_warning("Your post is too long! [ENDPOST_POST_MAX_LENGTH] characters max."))
+		return FALSE
+
 	var/new_post = list(
-		"body" = trim(body),
+		"body" = body,
 		"date" = server_timestamp("Day, Month DD, YYYY", ic_time = TRUE),
 		"time" = server_timestamp("hh:mm", ic_time = TRUE),
 		"author" = endpost_username,
@@ -788,7 +795,7 @@
 	)
 
 	UNTYPED_LIST_ADD(SSphones.endpost_posts, new_post)
-	log_phone("[key_name(user)] submitted a new endpost: [trim(body)] as [endpost_username]")
+	log_phone("[key_name(user)] submitted a new endpost: [body] as [endpost_username]")
 
 	return TRUE
 

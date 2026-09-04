@@ -135,8 +135,8 @@ return (
                         <textarea
                             placeholder="Posts are deleted after 24hrs"
                             value={body}
-                            onChange={(e) => setBody(e.target.value.slice(0, 1000))}
-                            maxLength={1000}
+                            onChange={(e) => setBody(e.target.value.slice(0, 500))}
+                            maxLength={500}
                             //disabled={!username}
                             style={{
                                 width: '100%',
@@ -153,7 +153,7 @@ return (
                             }}
                         />
                         <Box fontSize="0.75em" color="#999" textAlign="right" mt={0.5} mr={3}>
-                            {body.length}/1000
+                            {body.length}/500
                         </Box>
                     </Stack.Item>
                     <Stack.Item mr={2} ml={2}>
