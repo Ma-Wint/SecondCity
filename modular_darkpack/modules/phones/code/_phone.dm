@@ -1,3 +1,8 @@
+// Number of tiles per side rendered in the phone's camera viewfinder.
+#define CAMERA_VIEWFINDER_SIZE 5
+// Upper bound for the player-selectable camera picture width/height.
+#define CAMERA_PICTURE_SIZE_MAX 5
+
 /obj/item/smartphone
 	name = "smartphone"
 	desc = "A portable device to call anyone you want."
@@ -66,6 +71,18 @@
 	var/phone_background = ""
 	var/custom_background = null // ori's request to add a custom background URL
 	var/endpost_username = null //username for the endpost app
+	// The built-in camera used to take photos.
+	var/obj/item/camera/app/internal_camera
+	// Photos saved to the phone's gallery, as a list of /datum/picture.
+	var/list/saved_photos = list()
+	// Cache of base64 strings for saved photos, keyed by /datum/picture.
+	var/list/photo_b64_cache = list()
+	// The tile the player has aimed the camera at; newly taken photos are centred here.
+	var/turf/photo_target_turf
+	// The turf the viewfinder is currently centred on (kept stable while aiming).
+	var/turf/photo_focus_turf
+	// Number of tiles per side shown in the camera viewfinder.
+	var/viewfinder_size = CAMERA_VIEWFINDER_SIZE
 
 /obj/item/smartphone/Initialize(mapload)
 	. = ..()
@@ -79,6 +96,12 @@
 	phone_radio.canhear_range = 1
 	irc_channel = new()
 	wiki_book = new()
+	internal_camera = new(src)
+	internal_camera.silent = TRUE
+	internal_camera.flash_enabled = FALSE
+	internal_camera.print_picture_on_snap = FALSE
+	internal_camera.can_customise = FALSE
+	RegisterSignal(internal_camera, COMSIG_CAMERA_IMAGE_CAPTURED, PROC_REF(on_image_captured))
 	become_hearing_sensitive(ROUNDSTART_TRAIT)
 	RegisterSignal(src, COMSIG_MOVABLE_HEAR, PROC_REF(handle_hearing))
 	AddComponent(/datum/component/violation_observer, FALSE)
@@ -120,6 +143,10 @@
 
 	lose_hearing_sensitivity(ROUNDSTART_TRAIT)
 	UnregisterSignal(src, COMSIG_MOVABLE_HEAR)
+	if(internal_camera)
+		UnregisterSignal(internal_camera, COMSIG_CAMERA_IMAGE_CAPTURED)
+		QDEL_NULL(internal_camera)
+	QDEL_LIST(saved_photos)
 	if(sim_card)
 		sim_card.phone_weakref = null
 		QDEL_NULL(sim_card)
@@ -310,6 +337,24 @@
 		data["current_conversation_messages"] = format_conversation(current_viewed_conversation)
 	else
 		data["current_conversation_messages"] = list()
+
+	var/list/photos = list()
+	for(var/i in 1 to length(saved_photos))
+		var/datum/picture/picture = saved_photos[i]
+		UNTYPED_LIST_ADD(photos, list(
+			"name" = picture.picture_name,
+			"image" = photo_to_b64(picture),
+			"ref" = i,
+		))
+	data["photos"] = photos
+
+	if(internal_camera)
+		data["camera_view"] = render_camera_view(user)
+		data["viewfinder_size"] = viewfinder_size
+		data["pic_width"] = internal_camera.picture_size_x
+		data["pic_height"] = internal_camera.picture_size_y
+		data["photo_target_tile_x"] = get_camera_target_tile(user, "x")
+		data["photo_target_tile_y"] = get_camera_target_tile(user, "y")
 
 	data["posts"] = SSphones.endpost_posts
 	data["endpost_username"] = endpost_username
@@ -511,7 +556,7 @@
 			return TRUE
 
 		if("submit_post")
-			submit_post(user, params["body"])
+			submit_post(user, params["body"], get_photo_from_ref(params["photo_ref"]))
 			return TRUE
 
 		if("endpost_registration")
@@ -541,9 +586,50 @@
 			var/message_text = params["message_text"]
 			if(!contact_number || !message_text)
 				return FALSE
-			send_text_message(user, contact_number, message_text)
+			var/datum/picture/photo = get_photo_from_ref(params["photo_ref"])
+			send_text_message(user, contact_number, message_text, photo)
 			if(ringer)
 				playsound(loc, 'modular_darkpack/modules/phones/sounds/text_send.ogg', 50, TRUE)
+			return TRUE
+
+		if("take_photo")
+			take_picture(user)
+			return TRUE
+
+		if("set_photo_target")
+			if(params["tile_x"] == null || params["tile_y"] == null)
+				return FALSE
+			var/tile_x = text2num(params["tile_x"])
+			var/tile_y = text2num(params["tile_y"])
+			tile_x = clamp(tile_x, 0, viewfinder_size - 1)
+			tile_y = clamp(tile_y, 0, viewfinder_size - 1)
+			var/turf/center = photo_focus_turf || get_turf(user)
+			if(!center)
+				return FALSE
+			var/radius = (viewfinder_size - 1) / 2
+			var/turf/aim = locate(center.x + tile_x - radius, center.y + radius - tile_y, center.z)
+			if(aim)
+				photo_target_turf = aim
+			return TRUE
+
+		if("set_picture_size")
+			var/new_width = text2num(params["width"])
+			var/new_height = text2num(params["height"])
+			if(!new_width || !new_height)
+				return FALSE
+			internal_camera.picture_size_x = clamp(new_width, 1, CAMERA_PICTURE_SIZE_MAX)
+			internal_camera.picture_size_y = clamp(new_height, 1, CAMERA_PICTURE_SIZE_MAX)
+			return TRUE
+
+		if("delete_photo")
+			var/index = text2num(params["photo_ref"])
+			if(!index)
+				return FALSE
+			var/datum/picture/picture = saved_photos[index]
+			if(!picture)
+				return FALSE
+			photo_b64_cache -= picture
+			saved_photos.Cut(index, index + 1)
 			return TRUE
 
 	return FALSE
@@ -553,9 +639,11 @@
 		if(convo.contact_number == contact_number)
 			return convo
 
-/obj/item/smartphone/proc/send_text_message(mob/user, contact_number, message_text)
+/obj/item/smartphone/proc/send_text_message(mob/user, contact_number, message_text, datum/picture/photo = null)
 	if(!contact_number || !message_text)
 		return FALSE
+
+	var/photo_b64 = photo_to_b64(photo)
 
 	var/contact_name = get_number_contact_name(contact_number)
 	var/datum/phone_conversation/conversation = get_conversation(contact_number)
@@ -564,7 +652,7 @@
 		conversation = new(contact_name, contact_number)
 		conversations += conversation
 
-	conversation.add_message(message_text, TRUE)
+	conversation.add_message(message_text, TRUE, photo_b64)
 
 	var/obj/item/smartphone/receiving_phone = SSphones.get_phone_from_number(contact_number)
 	if(receiving_phone)
@@ -573,7 +661,7 @@
 		if(!recv_conversation)
 			recv_conversation = new(recv_contact_name, sim_card.phone_number)
 			receiving_phone.conversations += recv_conversation
-		recv_conversation.add_message(message_text, FALSE)
+		recv_conversation.add_message(message_text, FALSE, photo_b64)
 		addtimer(CALLBACK(receiving_phone, PROC_REF(after_text_received), contact_name, message_text), rand(1 SECONDS, 2 SECONDS)) //simulate random delay before sending an audible/visible alert
 		log_phone("[key_name(user)] sent a text to [contact_number]: [message_text]", list("sender" = contact_name, "receiver" = recv_contact_name, "message" = message_text))
 	return TRUE
@@ -597,6 +685,7 @@
 			"message_text" = msg.message_text,
 			"time" = msg.time,
 			"is_outgoing" = msg.is_outgoing,
+			"photo" = msg.photo_b64,
 		))
 
 	return formatted_messages
@@ -605,7 +694,85 @@
 	opened = always_open || !opened
 	update_appearance(UPDATE_ICON_STATE)
 
-/obj/item/smartphone/proc/submit_post(mob/user, body)
+// Takes a photo with the built-in camera, centred on the aimed tile (defaults to the user).
+/obj/item/smartphone/proc/take_picture(mob/user)
+	if(!internal_camera)
+		return
+	var/turf/target = photo_target_turf || get_turf(user)
+	internal_camera.attempt_picture(target, user)
+
+// Renders a top-down snapshot of the area around the user for the camera viewfinder.
+/obj/item/smartphone/proc/render_camera_view(mob/user)
+	var/turf/center = get_turf(user)
+	if(!center)
+		return null
+	photo_focus_turf = center
+	var/radius = (viewfinder_size - 1) / 2
+	var/icon/res = icon('icons/blanks/96x96.dmi', "nothing")
+	res.Scale(viewfinder_size * ICON_SIZE_X, viewfinder_size * ICON_SIZE_Y)
+	for(var/ox in -radius to radius)
+		for(var/oy in -radius to radius)
+			var/turf/current_turf = locate(center.x + ox, center.y + oy, center.z)
+			if(!current_turf)
+				continue
+			var/pixel_x = (ox + radius) * ICON_SIZE_X
+			var/pixel_y = (radius - oy) * ICON_SIZE_Y
+			var/icon/turf_icon = getFlatIcon(current_turf, no_anim = TRUE)
+			if(turf_icon)
+				res.Blend(turf_icon, ICON_OVERLAY, pixel_x, pixel_y)
+			for(var/atom/thing in current_turf.contents)
+				if(thing.invisibility)
+					continue
+				var/icon/thing_icon = getFlatIcon(thing, no_anim = TRUE)
+				if(!thing_icon)
+					continue
+				res.Blend(thing_icon, ICON_OVERLAY, pixel_x + thing.pixel_x, pixel_y + thing.pixel_y)
+	return icon2base64(res)
+
+// Returns the 0-based viewfinder-tile coordinate of the aimed tile.
+/obj/item/smartphone/proc/get_camera_target_tile(mob/user, which)
+	var/turf/center = photo_focus_turf || get_turf(user)
+	if(!center || !photo_target_turf)
+		return (viewfinder_size - 1) / 2
+	var/radius = (viewfinder_size - 1) / 2
+	switch(which)
+		if("x")
+			return clamp(photo_target_turf.x - center.x + radius, 0, viewfinder_size - 1)
+		if("y")
+			return clamp(center.y - photo_target_turf.y + radius, 0, viewfinder_size - 1)
+	return (viewfinder_size - 1) / 2
+
+// Called when the built-in camera finishes capturing a photo.
+/obj/item/smartphone/proc/on_image_captured(datum/source, atom/target, mob/user, datum/picture/picture)
+	SIGNAL_HANDLER
+	if(!picture)
+		return
+	saved_photos += picture
+	SStgui.update_uis(src)
+
+// Returns a base64 PNG string for a picture, caching the result on the phone.
+/obj/item/smartphone/proc/photo_to_b64(datum/picture/picture)
+	if(!picture)
+		return null
+	if(!photo_b64_cache[picture])
+		var/icon/img = picture.picture_image
+		if(!img)
+			img = picture.get_small_icon()
+		if(!img)
+			return null
+		photo_b64_cache[picture] = icon2base64(img)
+	return photo_b64_cache[picture]
+
+// Resolves a photo ref from the frontend to a picture datum.
+/obj/item/smartphone/proc/get_photo_from_ref(photo_ref)
+	if(!photo_ref)
+		return null
+	var/index = text2num(photo_ref)
+	if(!index)
+		return null
+	return saved_photos[index]
+
+/obj/item/smartphone/proc/submit_post(mob/user, body, datum/picture/photo = null)
 	if(!body)
 		return FALSE
 
@@ -616,7 +783,8 @@
 		"body" = trim(body),
 		"date" = server_timestamp("Day, Month DD, YYYY", ic_time = TRUE),
 		"time" = server_timestamp("hh:mm", ic_time = TRUE),
-		"author" = endpost_username
+		"author" = endpost_username,
+		"photo" = photo_to_b64(photo),
 	)
 
 	UNTYPED_LIST_ADD(SSphones.endpost_posts, new_post)
